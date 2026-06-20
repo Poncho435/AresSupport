@@ -5,9 +5,9 @@ from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from datetime import datetime
 
 # ===== ТОКЕН =====
-BOT_TOKEN = "8928296223:AAGldeC6kqg9ndpOeocTm6C1IURUCZTRR4s"  # СМЕНИТЕ!
+BOT_TOKEN = "8928296223:AAGldeC6kqg9ndpOeocTm6C1IURUCZTRR4s"
 # ===== АДМИНИСТРАТОРЫ (список ID) =====
-ADMINS = [5461117804,6495487082]  # Ваш ID
+ADMINS = [5461117804]  # Ваш ID
 # =======================================
 
 bot = Bot(token=BOT_TOKEN)
@@ -82,7 +82,7 @@ async def del_admin(message: types.Message):
     
     try:
         del_admin_id = int(message.text.split()[1])
-        if del_admin_id in ADMINS and del_admin_id != 5461117804:  # Нельзя удалить главного админа
+        if del_admin_id in ADMINS and del_admin_id != 5461117804:
             ADMINS.remove(del_admin_id)
             await message.answer(f"✅ Администратор {del_admin_id} удален!")
         else:
@@ -222,7 +222,10 @@ async def handle_message(message: types.Message):
         except:
             pass
     
-    await message.answer("✅ **Сообщение получено!** Ответим скоро.")
+    await message.answer(
+        "✅ **Сообщение получено!**\n\n"
+        "Наши операторы уже уведомлены. Мы ответим вам в ближайшее время."
+    )
 
 # ==========================================
 # 7. КОМАНДА /chats
@@ -490,7 +493,7 @@ async def clear_all(message: types.Message):
 async def main():
     print("=" * 50)
     print("🔕 БОТ ПОДДЕРЖКИ")
-    print(f"👤 Главный админ: {ADMINS[0]}")
+    print(f"👤 Ваш ID: {ADMINS[0]}")
     print(f"👥 Всего админов: {len(ADMINS)}")
     print("📋 Команды:")
     print("   /start - главное меню")
