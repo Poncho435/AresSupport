@@ -68,7 +68,6 @@ async def toggle_dnd(message: types.Message):
             "🔔 Чтобы выключить, снова введите /dnd"
         )
     else:
-        # При выключении показываем сколько накопилось
         count = len(pending_messages)
         await message.answer(
             f"🔔 **Режим 'Не беспокоить' ВЫКЛЮЧЕН**\n\n"
@@ -94,8 +93,6 @@ async def check_messages(message: types.Message):
         return
     
     count = len(pending_messages)
-    
-    # Показываем краткий список
     text = f"📬 **Накопленные сообщения** ({count})\n\n"
     
     for i, (user_id, msg_text, name, time) in enumerate(pending_messages[:10], 1):
@@ -125,10 +122,8 @@ async def handle_message(message: types.Message):
     
     # === АДМИН ===
     if user_id == ADMIN_ID:
-        # Если в режиме ответа - отправляем пользователю
         if reply_mode:
             try:
-                # Сохраняем в историю
                 if reply_mode not in history:
                     history[reply_mode] = []
                 history[reply_mode].append({
@@ -137,15 +132,12 @@ async def handle_message(message: types.Message):
                     'time': datetime.now().strftime("%H:%M")
                 })
                 
-                # Отправляем пользователю
                 await bot.send_message(
                     reply_mode,
                     f"📩 **Ответ поддержки:**\n\n{message.text}"
                 )
                 
-                # Показываем обновленный диалог админу
                 await show_dialog(message, reply_mode)
-                
                 reply_mode = None
                 
             except Exception as e:
@@ -154,11 +146,8 @@ async def handle_message(message: types.Message):
         return
     
     # === ПОЛЬЗОВАТЕЛЬ ===
-    
-    # Добавляем в список
     users.add(user_id)
     
-    # Сохраняем историю
     if user_id not in history:
         history[user_id] = []
     history[user_id].append({
@@ -167,26 +156,18 @@ async def handle_message(message: types.Message):
         'time': datetime.now().strftime("%H:%M")
     })
     
-    # Получаем данные пользователя
     name = message.from_user.full_name
     username = f"@{message.from_user.username}" if message.from_user.username else ""
     time_now = datetime.now().strftime("%H:%M:%S")
     
-    # === ЕСЛИ РЕЖИМ DND ВКЛЮЧЕН ===
     if dnd_mode:
-        # Сохраняем в накопленные
         pending_messages.append((user_id, message.text or '📎 Файл', name, time_now))
-        
-        # Ответ пользователю (короткий)
         await message.answer(
             "✅ **Сообщение получено!**\n\n"
             "Наши операторы уведомлены. Мы ответим вам в ближайшее время."
         )
         return
     
-    # === РЕЖИМ DND ВЫКЛЮЧЕН ===
-    
-    # Красивое уведомление админу
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="💬 Ответить", callback_data=f"reply_{user_id}")],
         [InlineKeyboardButton(text="📋 История", callback_data=f"history_{user_id}")]
@@ -206,7 +187,6 @@ async def handle_message(message: types.Message):
         parse_mode="Markdown"
     )
     
-    # Ответ пользователю
     await message.answer(
         "✅ **Сообщение получено!**\n\n"
         "Наши операторы уже уведомлены. Мы ответим вам в ближайшее время.\n"
@@ -214,11 +194,12 @@ async def handle_message(message: types.Message):
     )
 
 # ==========================================
-# 5. КОМАНДА /chats
+# 5. КОМАНДА /chats - ИСПРАВЛЕНА
 # ==========================================
 @dp.message(Command("chats"))
 async def cmd_chats(message: types.Message):
     if message.from_user.id != ADMIN_ID:
+        await message.answer("⛔ Нет доступа")
         return
     
     if not users:
@@ -228,7 +209,6 @@ async def cmd_chats(message: types.Message):
         )
         return
     
-    # Создаем красивые кнопки
     keyboard = InlineKeyboardMarkup(inline_keyboard=[])
     
     for user_id in users:
@@ -252,7 +232,6 @@ async def cmd_chats(message: types.Message):
                 )
             ])
     
-    # Добавляем кнопку с накопленными
     if pending_messages:
         keyboard.inline_keyboard.append([
             InlineKeyboardButton(
@@ -380,7 +359,6 @@ async def reply_to_user(callback: types.CallbackQuery):
     user_id = int(callback.data.split("_")[1])
     reply_mode = user_id
     
-    # Убираем из накопленных если был
     global pending_messages
     pending_messages = [p for p in pending_messages if p[0] != user_id]
     
