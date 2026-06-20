@@ -6,27 +6,32 @@ from datetime import datetime
 
 # ===== ТОКЕН =====
 BOT_TOKEN = "8928296223:AAGldeC6kqg9ndpOeocTm6C1IURUCZTRR4s"  # СМЕНИТЕ!
-ADMIN_ID = 5461117804
-# =================
+# ===== АДМИНИСТРАТОРЫ (список ID) =====
+ADMINS = [5461117804,6495487082]  # Ваш ID
+# =======================================
 
 bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher()
 
 # Хранилище данных
-users = set()  # Все пользователи
-history = {}   # {user_id: [сообщения]}
-reply_mode = None  # Кому сейчас отвечаем
+users = set()
+history = {}
+reply_mode = None
+dnd_mode = False
+pending_messages = []
 
-# Режим "Не беспокоить"
-dnd_mode = False  # False - уведомления приходят, True - не приходят
-pending_messages = []  # Накопленные сообщения
+# ==========================================
+# ФУНКЦИЯ ПРОВЕРКИ АДМИНА
+# ==========================================
+def is_admin(user_id):
+    return user_id in ADMINS
 
 # ==========================================
 # 1. КОМАНДА /start
 # ==========================================
 @dp.message(Command("start"))
 async def cmd_start(message: types.Message):
-    if message.from_user.id == ADMIN_ID:
+    if is_admin(message.from_user.id):
         status = "🔕 ВКЛЮЧЕН" if dnd_mode else "🔔 ВЫКЛЮЧЕН"
         
         await message.answer(
@@ -35,61 +40,92 @@ async def cmd_start(message: types.Message):
             f"📋 /chats - список активных чатов\n"
             f"🔇 /dnd - включить/выключить 'Не беспокоить'\n"
             f"📬 /check - проверить новые сообщения\n"
-            f"✉️ /reply - ответить выбранному пользователю\n"
             f"❌ /cancel - отменить ответ\n"
-            f"🗑 /clear - очистить историю\n\n"
-            f"💡 В режиме 'Не беспокоить' сообщения копятся,\n"
-            f"вы проверяете их командой /check"
+            f"🗑 /clear - очистить историю\n"
+            f"👥 /addadmin ID - добавить администратора\n"
+            f"👥 /deladmin ID - удалить администратора\n\n"
+            f"💡 В режиме 'Не беспокоить' сообщения копятся"
         )
     else:
         await message.answer(
             "👋 **Добро пожаловать в поддержку!**\n\n"
-            "Напишите ваш вопрос, и мы свяжемся с вами в ближайшее время.\n"
-            "⏰ Обычно мы отвечаем в течение 5-15 минут."
+            "Напишите ваш вопрос, и мы свяжемся с вами в ближайшее время."
         )
 
 # ==========================================
-# 2. ВКЛЮЧЕНИЕ/ВЫКЛЮЧЕНИЕ DND
+# 2. ДОБАВИТЬ АДМИНИСТРАТОРА
+# ==========================================
+@dp.message(Command("addadmin"))
+async def add_admin(message: types.Message):
+    if not is_admin(message.from_user.id):
+        await message.answer("⛔ Нет доступа")
+        return
+    
+    try:
+        new_admin = int(message.text.split()[1])
+        if new_admin not in ADMINS:
+            ADMINS.append(new_admin)
+            await message.answer(f"✅ Администратор {new_admin} добавлен!")
+        else:
+            await message.answer(f"⚠️ {new_admin} уже в списке")
+    except:
+        await message.answer("❌ Используйте: `/addadmin 123456789`", parse_mode="Markdown")
+
+# ==========================================
+# 3. УДАЛИТЬ АДМИНИСТРАТОРА
+# ==========================================
+@dp.message(Command("deladmin"))
+async def del_admin(message: types.Message):
+    if not is_admin(message.from_user.id):
+        await message.answer("⛔ Нет доступа")
+        return
+    
+    try:
+        del_admin_id = int(message.text.split()[1])
+        if del_admin_id in ADMINS and del_admin_id != 5461117804:  # Нельзя удалить главного админа
+            ADMINS.remove(del_admin_id)
+            await message.answer(f"✅ Администратор {del_admin_id} удален!")
+        else:
+            await message.answer(f"⚠️ Нельзя удалить главного админа или такого ID нет")
+    except:
+        await message.answer("❌ Используйте: `/deladmin 123456789`", parse_mode="Markdown")
+
+# ==========================================
+# 4. ВКЛЮЧЕНИЕ/ВЫКЛЮЧЕНИЕ DND
 # ==========================================
 @dp.message(Command("dnd"))
 async def toggle_dnd(message: types.Message):
-    global dnd_mode
-    
-    if message.from_user.id != ADMIN_ID:
+    if not is_admin(message.from_user.id):
         return
     
+    global dnd_mode
     dnd_mode = not dnd_mode
     
     if dnd_mode:
         await message.answer(
             "🔕 **Режим 'Не беспокоить' ВКЛЮЧЕН**\n\n"
             "✅ Сообщения от пользователей будут накапливаться\n"
-            "📬 Для проверки используйте /check\n"
-            "🔔 Чтобы выключить, снова введите /dnd"
+            "📬 Для проверки используйте /check"
         )
     else:
         count = len(pending_messages)
         await message.answer(
             f"🔔 **Режим 'Не беспокоить' ВЫКЛЮЧЕН**\n\n"
-            f"📬 Накоплено сообщений: {count}\n"
-            f"📋 Используйте /check для просмотра"
+            f"📬 Накоплено сообщений: {count}"
         )
 
 # ==========================================
-# 3. ПРОВЕРКА НАКОПЛЕННЫХ СООБЩЕНИЙ
+# 5. ПРОВЕРКА НАКОПЛЕННЫХ
 # ==========================================
 @dp.message(Command("check"))
 async def check_messages(message: types.Message):
-    if message.from_user.id != ADMIN_ID:
+    if not is_admin(message.from_user.id):
         return
     
     global pending_messages
     
     if not pending_messages:
-        await message.answer(
-            "📭 **Нет новых сообщений**\n\n"
-            "Все чаты пусты или вы уже все проверили."
-        )
+        await message.answer("📭 **Нет новых сообщений**")
         return
     
     count = len(pending_messages)
@@ -102,17 +138,14 @@ async def check_messages(message: types.Message):
     if count > 10:
         text += f"... и еще {count - 10} сообщений\n\n"
     
-    text += "Нажмите на кнопку, чтобы посмотреть все чаты:"
-    
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="📋 Открыть все чаты", callback_data="check_open")],
         [InlineKeyboardButton(text="✅ Отметить все как прочитанные", callback_data="check_clear")]
     ])
     
     await message.answer(text, reply_markup=keyboard, parse_mode="Markdown")
 
 # ==========================================
-# 4. ОБРАБОТКА СООБЩЕНИЙ
+# 6. ОБРАБОТКА СООБЩЕНИЙ
 # ==========================================
 @dp.message()
 async def handle_message(message: types.Message):
@@ -121,7 +154,7 @@ async def handle_message(message: types.Message):
     user_id = message.from_user.id
     
     # === АДМИН ===
-    if user_id == ADMIN_ID:
+    if is_admin(user_id):
         if reply_mode:
             try:
                 if reply_mode not in history:
@@ -162,51 +195,46 @@ async def handle_message(message: types.Message):
     
     if dnd_mode:
         pending_messages.append((user_id, message.text or '📎 Файл', name, time_now))
-        await message.answer(
-            "✅ **Сообщение получено!**\n\n"
-            "Наши операторы уведомлены. Мы ответим вам в ближайшее время."
-        )
+        await message.answer("✅ **Сообщение получено!** Ответим скоро.")
         return
     
-    keyboard = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="💬 Ответить", callback_data=f"reply_{user_id}")],
-        [InlineKeyboardButton(text="📋 История", callback_data=f"history_{user_id}")]
-    ])
+    # Отправляем всем админам
+    for admin_id in ADMINS:
+        try:
+            keyboard = InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text="💬 Ответить", callback_data=f"reply_{user_id}")],
+                [InlineKeyboardButton(text="📋 История", callback_data=f"history_{user_id}")]
+            ])
+            
+            await bot.send_message(
+                admin_id,
+                f"📩 **НОВОЕ СООБЩЕНИЕ**\n"
+                f"━━━━━━━━━━━━━━━━━━\n"
+                f"👤 {name} {username}\n"
+                f"🆔 ID: `{user_id}`\n"
+                f"━━━━━━━━━━━━━━━━━━\n"
+                f"💬 {message.text or '📎 Файл'}\n"
+                f"━━━━━━━━━━━━━━━━━━\n"
+                f"⏰ {time_now}",
+                reply_markup=keyboard,
+                parse_mode="Markdown"
+            )
+        except:
+            pass
     
-    await bot.send_message(
-        ADMIN_ID,
-        f"📩 **НОВОЕ СООБЩЕНИЕ**\n"
-        f"━━━━━━━━━━━━━━━━━━\n"
-        f"👤 {name} {username}\n"
-        f"🆔 ID: `{user_id}`\n"
-        f"━━━━━━━━━━━━━━━━━━\n"
-        f"💬 {message.text or '📎 Файл'}\n"
-        f"━━━━━━━━━━━━━━━━━━\n"
-        f"⏰ {time_now}",
-        reply_markup=keyboard,
-        parse_mode="Markdown"
-    )
-    
-    await message.answer(
-        "✅ **Сообщение получено!**\n\n"
-        "Наши операторы уже уведомлены. Мы ответим вам в ближайшее время.\n"
-        "⏳ Ожидайте ответа в этом чате."
-    )
+    await message.answer("✅ **Сообщение получено!** Ответим скоро.")
 
 # ==========================================
-# 5. КОМАНДА /chats - ИСПРАВЛЕНА
+# 7. КОМАНДА /chats
 # ==========================================
 @dp.message(Command("chats"))
 async def cmd_chats(message: types.Message):
-    if message.from_user.id != ADMIN_ID:
+    if not is_admin(message.from_user.id):
         await message.answer("⛔ Нет доступа")
         return
     
     if not users:
-        await message.answer(
-            "📭 **Нет активных чатов**\n\n"
-            "Пользователи еще не писали."
-        )
+        await message.answer("📭 **Нет активных чатов**")
         return
     
     keyboard = InlineKeyboardMarkup(inline_keyboard=[])
@@ -247,17 +275,17 @@ async def cmd_chats(message: types.Message):
     await message.answer(
         f"📋 **Активные чаты** ({len(users)})\n\n"
         f"Статус DND: {'🔕 ВКЛ' if dnd_mode else '🔔 ВЫКЛ'}\n"
-        f"Накоплено: {len(pending_messages)}\n\n"
-        "Нажмите на пользователя, чтобы открыть диалог:",
+        f"Накоплено: {len(pending_messages)}\n"
+        f"Админов: {len(ADMINS)}",
         reply_markup=keyboard
     )
 
 # ==========================================
-# 6. ПОКАЗАТЬ НАКОПЛЕННЫЕ
+# 8. ПОКАЗАТЬ НАКОПЛЕННЫЕ
 # ==========================================
 @dp.callback_query(lambda c: c.data == "show_pending")
 async def show_pending(callback: types.CallbackQuery):
-    if callback.from_user.id != ADMIN_ID:
+    if not is_admin(callback.from_user.id):
         await callback.answer("⛔ Нет доступа", show_alert=True)
         return
     
@@ -281,16 +309,15 @@ async def show_pending(callback: types.CallbackQuery):
     await callback.answer()
 
 # ==========================================
-# 7. ОЧИСТИТЬ НАКОПЛЕННЫЕ
+# 9. ОЧИСТИТЬ НАКОПЛЕННЫЕ
 # ==========================================
 @dp.callback_query(lambda c: c.data == "check_clear")
 async def clear_pending(callback: types.CallbackQuery):
-    global pending_messages
-    
-    if callback.from_user.id != ADMIN_ID:
+    if not is_admin(callback.from_user.id):
         await callback.answer("⛔ Нет доступа", show_alert=True)
         return
     
+    global pending_messages
     count = len(pending_messages)
     pending_messages = []
     
@@ -298,11 +325,11 @@ async def clear_pending(callback: types.CallbackQuery):
     await cmd_chats(callback.message)
 
 # ==========================================
-# 8. ОТКРЫТЬ ДИАЛОГ
+# 10. ОТКРЫТЬ ДИАЛОГ
 # ==========================================
 @dp.callback_query(lambda c: c.data.startswith("chat_"))
 async def open_chat(callback: types.CallbackQuery):
-    if callback.from_user.id != ADMIN_ID:
+    if not is_admin(callback.from_user.id):
         await callback.answer("⛔ Нет доступа", show_alert=True)
         return
     
@@ -311,7 +338,7 @@ async def open_chat(callback: types.CallbackQuery):
     await callback.answer()
 
 # ==========================================
-# 9. ПОКАЗАТЬ ДИАЛОГ
+# 11. ПОКАЗАТЬ ДИАЛОГ
 # ==========================================
 async def show_dialog(message, user_id):
     try:
@@ -346,39 +373,35 @@ async def show_dialog(message, user_id):
     await message.edit_text(dialog_text, reply_markup=keyboard, parse_mode="Markdown")
 
 # ==========================================
-# 10. ОТВЕТИТЬ ПОЛЬЗОВАТЕЛЮ
+# 12. ОТВЕТИТЬ
 # ==========================================
 @dp.callback_query(lambda c: c.data.startswith("reply_"))
 async def reply_to_user(callback: types.CallbackQuery):
-    global reply_mode
-    
-    if callback.from_user.id != ADMIN_ID:
+    if not is_admin(callback.from_user.id):
         await callback.answer("⛔ Нет доступа", show_alert=True)
         return
     
+    global reply_mode, pending_messages
     user_id = int(callback.data.split("_")[1])
     reply_mode = user_id
-    
-    global pending_messages
     pending_messages = [p for p in pending_messages if p[0] != user_id]
     
     await callback.message.edit_text(
         f"✍️ **Режим ответа**\n"
         f"━━━━━━━━━━━━━━━━━━\n"
         f"👤 Пользователь: `{user_id}`\n\n"
-        f"Просто напишите сообщение в этот чат,\n"
-        f"и оно будет отправлено пользователю.\n\n"
-        f"❌ Для отмены нажмите /cancel",
+        f"Напишите сообщение для отправки.\n"
+        f"❌ Отмена: /cancel",
         parse_mode="Markdown"
     )
-    await callback.answer("✅ Режим ответа активирован! Напишите сообщение.")
+    await callback.answer("✅ Напишите ответ!")
 
 # ==========================================
-# 11. ВСЯ ИСТОРИЯ
+# 13. ВСЯ ИСТОРИЯ
 # ==========================================
 @dp.callback_query(lambda c: c.data.startswith("history_"))
 async def show_full_history(callback: types.CallbackQuery):
-    if callback.from_user.id != ADMIN_ID:
+    if not is_admin(callback.from_user.id):
         await callback.answer("⛔ Нет доступа", show_alert=True)
         return
     
@@ -389,29 +412,43 @@ async def show_full_history(callback: types.CallbackQuery):
         await callback.answer("История пуста", show_alert=True)
         return
     
-    text = f"📜 **Вся история переписки**\n"
-    text += f"━━━━━━━━━━━━━━━━━━━━━━\n\n"
-    
+    text = f"📜 **Вся история**\n━━━━━━━━━━━━\n\n"
     for msg in msgs:
         icon = "👤" if msg['from'] == 'user' else "🤖"
         text += f"{icon} [{msg['time']}] {msg['text']}\n"
     
     if len(text) > 4000:
-        text = text[:4000] + "\n\n... (история слишком длинная)"
+        text = text[:4000] + "\n\n... (длинная история)"
     
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="🔙 Назад", callback_data=f"chat_{user_id}")]
     ])
     
     await callback.message.edit_text(text, reply_markup=keyboard)
-    await callback.answer()
 
 # ==========================================
-# 12. ЗАКРЫТЬ ЧАТ
+# 14. ОСТАЛЬНЫЕ КОЛБЭКИ
 # ==========================================
+@dp.callback_query(lambda c: c.data == "refresh")
+async def refresh(callback: types.CallbackQuery):
+    if not is_admin(callback.from_user.id):
+        await callback.answer("⛔ Нет доступа", show_alert=True)
+        return
+    
+    await cmd_chats(callback.message)
+    await callback.answer("🔄 Обновлено!")
+
+@dp.callback_query(lambda c: c.data == "back")
+async def back_to_list(callback: types.CallbackQuery):
+    if not is_admin(callback.from_user.id):
+        await callback.answer("⛔ Нет доступа", show_alert=True)
+        return
+    
+    await cmd_chats(callback.message)
+
 @dp.callback_query(lambda c: c.data.startswith("close_"))
 async def close_chat(callback: types.CallbackQuery):
-    if callback.from_user.id != ADMIN_ID:
+    if not is_admin(callback.from_user.id):
         await callback.answer("⛔ Нет доступа", show_alert=True)
         return
     
@@ -423,44 +460,21 @@ async def close_chat(callback: types.CallbackQuery):
     await cmd_chats(callback.message)
 
 # ==========================================
-# 13. ОБНОВИТЬ
-# ==========================================
-@dp.callback_query(lambda c: c.data == "refresh")
-async def refresh(callback: types.CallbackQuery):
-    if callback.from_user.id != ADMIN_ID:
-        await callback.answer("⛔ Нет доступа", show_alert=True)
-        return
-    
-    await cmd_chats(callback.message)
-    await callback.answer("🔄 Обновлено!")
-
-# ==========================================
-# 14. НАЗАД К СПИСКУ
-# ==========================================
-@dp.callback_query(lambda c: c.data == "back")
-async def back_to_list(callback: types.CallbackQuery):
-    if callback.from_user.id != ADMIN_ID:
-        await callback.answer("⛔ Нет доступа", show_alert=True)
-        return
-    
-    await cmd_chats(callback.message)
-
-# ==========================================
 # 15. ОТМЕНА
 # ==========================================
 @dp.message(Command("cancel"))
 async def cancel_reply(message: types.Message):
     global reply_mode
-    if message.from_user.id == ADMIN_ID:
+    if is_admin(message.from_user.id):
         reply_mode = None
-        await message.answer("❌ **Режим ответа отменен**\n\nИспользуйте /chats для списка")
+        await message.answer("❌ **Режим ответа отменен**")
 
 # ==========================================
 # 16. ОЧИСТИТЬ ВСЁ
 # ==========================================
 @dp.message(Command("clear"))
 async def clear_all(message: types.Message):
-    if message.from_user.id != ADMIN_ID:
+    if not is_admin(message.from_user.id):
         return
     
     global pending_messages
@@ -468,21 +482,23 @@ async def clear_all(message: types.Message):
     history.clear()
     pending_messages = []
     
-    await message.answer("🗑 **Все данные очищены**\n\nИстория, список чатов и накопленные сообщения удалены.")
+    await message.answer("🗑 **Все данные очищены**")
 
 # ==========================================
 # 17. ЗАПУСК
 # ==========================================
 async def main():
     print("=" * 50)
-    print("🔕 БОТ ПОДДЕРЖКИ (С РЕЖИМОМ НЕ БЕСПОКОИТЬ)")
-    print(f"👤 Админ: {ADMIN_ID}")
+    print("🔕 БОТ ПОДДЕРЖКИ")
+    print(f"👤 Главный админ: {ADMINS[0]}")
+    print(f"👥 Всего админов: {len(ADMINS)}")
     print("📋 Команды:")
     print("   /start - главное меню")
+    print("   /chats - список активных чатов")
     print("   /dnd - включить/выключить 'Не беспокоить'")
     print("   /check - проверить накопленные сообщения")
-    print("   /chats - список активных чатов")
-    print("   /reply - ответить")
+    print("   /addadmin ID - добавить администратора")
+    print("   /deladmin ID - удалить администратора")
     print("   /cancel - отменить ответ")
     print("   /clear - очистить всё")
     print("=" * 50)
