@@ -3,6 +3,9 @@ from aiogram import Bot, Dispatcher, types
 from aiogram.filters import Command
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from datetime import datetime
+from flask import Flask, request
+import threading
+import os
 
 # ===== ТОКЕН =====
 BOT_TOKEN = "8928296223:AAGldeC6kqg9ndpOeocTm6C1IURUCZTRR4s"
@@ -17,6 +20,9 @@ history = {}
 reply_mode = None
 dnd_mode = False
 pending_messages = []
+
+# Flask для веб-сервера
+app = Flask(__name__)
 
 # ==========================================
 # ПРОВЕРКА АДМИНА
@@ -426,8 +432,26 @@ async def clear_all(message: types.Message):
     await message.answer("🗑 Все очищено")
 
 # ==========================================
-# 16. ЗАПУСК
+# 16. ВЕБ-СЕРВЕР ДЛЯ RENDER
 # ==========================================
+@app.route('/')
+def home():
+    return "🤖 Бот работает!", 200
+
+@app.route('/ping')
+def ping():
+    return "pong", 200
+
+@app.route('/health')
+def health():
+    return {"status": "ok", "users": len(users), "admins": len(ADMINS)}, 200
+
+# ==========================================
+# 17. ЗАПУСК БОТА В ОТДЕЛЬНОМ ПОТОКЕ
+# ==========================================
+def run_bot():
+    asyncio.run(main())
+
 async def main():
     print("=" * 50)
     print("🤖 БОТ ПОДДЕРЖКИ (ПОЛНАЯ ВЕРСИЯ)")
@@ -442,7 +466,21 @@ async def main():
     print("   /cancel - отменить ответ")
     print("   /clear - очистить всё")
     print("=" * 50)
-    await dp.start_polling(bot)
+    
+    # Удаляем вебхук и запускаем polling
+    await bot.delete_webhook(drop_pending_updates=True)
+    await dp.start_polling(bot, skip_updates=True)
 
+# ==========================================
+# 18. ОСНОВНОЙ ЗАПУСК
+# ==========================================
 if __name__ == "__main__":
-    asyncio.run(main())
+    # Запускаем Flask веб-сервер в отдельном потоке
+    port = int(os.environ.get('PORT', 5000))
+    
+    # Запускаем бота в отдельном потоке
+    bot_thread = threading.Thread(target=run_bot, daemon=True)
+    bot_thread.start()
+    
+    # Запускаем веб-сервер
+    app.run(host='0.0.0.0', port=port, debug=False, use_reloader=False)
