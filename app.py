@@ -3,9 +3,11 @@ from aiogram import Bot, Dispatcher, types
 from aiogram.filters import Command
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from datetime import datetime
-from flask import Flask, request
+from flask import Flask, request, jsonify
 import threading
 import os
+import signal
+import sys
 
 # ===== ТОКЕН =====
 BOT_TOKEN = "8928296223:AAGldeC6kqg9ndpOeocTm6C1IURUCZTRR4s"
@@ -444,14 +446,24 @@ def ping():
 
 @app.route('/health')
 def health():
-    return {"status": "ok", "users": len(users), "admins": len(ADMINS)}, 200
+    return jsonify({
+        "status": "ok", 
+        "users": len(users), 
+        "admins": len(ADMINS),
+        "pending": len(pending_messages)
+    }), 200
 
 # ==========================================
-# 17. ЗАПУСК БОТА В ОТДЕЛЬНОМ ПОТОКЕ
+# 17. ЗАПУСК FLASK В ОТДЕЛЬНОМ ПОТОКЕ
 # ==========================================
-def run_bot():
-    asyncio.run(main())
+def run_flask():
+    port = int(os.environ.get('PORT', 5000))
+    # Отключаем сигналы для Flask
+    app.run(host='0.0.0.0', port=port, debug=False, use_reloader=False)
 
+# ==========================================
+# 18. ОСНОВНОЙ ЗАПУСК
+# ==========================================
 async def main():
     print("=" * 50)
     print("🤖 БОТ ПОДДЕРЖКИ (ПОЛНАЯ ВЕРСИЯ)")
@@ -467,20 +479,17 @@ async def main():
     print("   /clear - очистить всё")
     print("=" * 50)
     
-    # Удаляем вебхук и запускаем polling
+    # Создаем отдельный поток для Flask
+    flask_thread = threading.Thread(target=run_flask, daemon=True)
+    flask_thread.start()
+    
+    # Запускаем бота в основном потоке
     await bot.delete_webhook(drop_pending_updates=True)
     await dp.start_polling(bot, skip_updates=True)
 
-# ==========================================
-# 18. ОСНОВНОЙ ЗАПУСК
-# ==========================================
 if __name__ == "__main__":
-    # Запускаем Flask веб-сервер в отдельном потоке
-    port = int(os.environ.get('PORT', 5000))
-    
-    # Запускаем бота в отдельном потоке
-    bot_thread = threading.Thread(target=run_bot, daemon=True)
-    bot_thread.start()
-    
-    # Запускаем веб-сервер
-    app.run(host='0.0.0.0', port=port, debug=False, use_reloader=False)
+    # Запускаем бота (он будет в основном потоке)
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        print("\n👋 Бот остановлен")
